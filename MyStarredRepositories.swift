@@ -43,58 +43,67 @@ if passWord == nil {
 
 
 let userNamePassWord = String(format: "%@:%@", userName!, passWord!)
-let API = String(format: "https://api.github.com/users/%@/starred?page=1&per_page=100", userName!)
 
-
-
-if let url = URL(string: API) {
-    var request = URLRequest(url: url)
-    request.httpMethod = "GET"
+var currentPage = 0
+var allCount = 0
+let semaphore = DispatchSemaphore(value: 0)
+print("开始创建MD~")
+func fetchData(page: Int) {
+    print("加载第\(currentPage + 1)页ing")
+    let API = String(format: "https://api.github.com/users/%@/starred?page=%d&per_page=1000", userName!, page)
     
-    guard let userNameData = userNamePassWord.data(using: .utf8) else {
-        exit(0)
-    }
-    
-    let userNameBase64 = userNameData.base64EncodedString(options: Data.Base64EncodingOptions(rawValue: 0))
-    let userNameAuth = String(format:"BASIC %@", userNameBase64)
-    request.setValue(userNameAuth, forHTTPHeaderField: "Authorization")
-    
-    let semaphore = DispatchSemaphore(value: 0)
-    print("开始创建MD~")
-    let starTask = URLSession.shared.dataTask(with: request) { (data, response, error) in
-        if let error = error {
-            print(error.localizedDescription)
-            return
+    if let url = URL(string: API) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        
+        guard let userNameData = userNamePassWord.data(using: .utf8) else {
+            exit(0)
         }
-        if let data = data {
-            do {
-                guard let starArray = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? Array<Dictionary<String, Any>>, starArray.count > 0 else {
-                    return
-                }
-                for item in starArray {
-                    if let name = item["name"] as? String, let url = item["url"] as? String, let desc = item["description"] as? String {
-                        templete += String(format: itemString, name, url, desc)
-                    }
-                }
-                
+        
+        let userNameBase64 = userNameData.base64EncodedString(options: Data.Base64EncodingOptions(rawValue: 0))
+        let userNameAuth = String(format:"BASIC %@", userNameBase64)
+        request.setValue(userNameAuth, forHTTPHeaderField: "Authorization")
+        
+        let starTask = URLSession.shared.dataTask(with: request) { (data, response, error) in
+            if let error = error {
+                print(error.localizedDescription)
+                return
+            }
+            if let data = data {
                 do {
-                    try templete.write(toFile: FileManager.default.currentDirectoryPath.appendingFormat("%@", "/README.md"), atomically: false, encoding: .utf8)
+                    guard let starArray = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? Array<Dictionary<String, Any>>, starArray.count > 0 else {
+                        semaphore.signal()
+                        return
+                    }
+                    allCount += starArray.count
+                    for item in starArray {
+                        if let name = item["name"] as? String, let url = item["url"] as? String, let desc = item["description"] as? String {
+                            templete += String(format: itemString, name, url, desc)
+                        }
+                    }
                 } catch {
                     print(error)
+                    exit(0)
                 }
-                
-                print("🎉🎉 创建MD成功!! ")
-            } catch {
-                print(error)
             }
+            currentPage = currentPage + 1
+            fetchData(page: currentPage)
         }
-        semaphore.signal()
+        
+        starTask.resume()
     }
-    
-    starTask.resume()
-    _ = semaphore.wait(timeout: DispatchTime.distantFuture)
 }
 
+fetchData(page: currentPage)
 
+_ = semaphore.wait(timeout: DispatchTime.distantFuture)
 
+do {
+    try templete.write(toFile: FileManager.default.currentDirectoryPath.appendingFormat("%@", "/README.md"), atomically: false, encoding: .utf8)
+} catch {
+    print(error)
+    exit(0)
+}
 
+print("Star了\(allCount)个仓库")
+print("🎉🎉 创建MD成功!! ")
