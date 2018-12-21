@@ -77,7 +77,7 @@ func fetchData(page: Int) {
                     }
                     allCount += starArray.count
                     for item in starArray {
-                        if let name = item["name"] as? String, let url = item["url"] as? String, let desc = item["description"] as? String {
+                        if let name = item["name"] as? String, let url = item["html_url"] as? String, let desc = item["description"] as? String {
                             templete += String(format: itemString, name, url, desc)
                         }
                     }
